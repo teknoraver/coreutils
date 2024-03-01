@@ -85,6 +85,7 @@ normal_progs='
     mkfifo
     mknod
     mktemp
+    mu
     mv
     nl
     nproc
