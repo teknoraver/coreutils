@@ -626,7 +626,7 @@ static void
 base16_encode (char const *restrict in, idx_t inlen,
                char *restrict out, idx_t outlen)
 {
-  static const char base16[16] = "0123456789ABCDEF";
+  static const char base16[16] __attribute__ ((nonstring)) = "0123456789ABCDEF";
 
   while (inlen && outlen)
     {
@@ -711,7 +711,7 @@ isuz85 (unsigned char ch)
   return c_isalnum (ch) || strchr (".-:+=^!/*?&<>()[]{}@%$#", ch) != nullptr;
 }
 
-static char const z85_encoding[85] =
+static char const z85_encoding[85] __attribute__ ((nonstring)) =
   "0123456789"
   "abcdefghijklmnopqrstuvwxyz"
   "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -1136,7 +1136,7 @@ do_decode (FILE *in, char const *infile, FILE *out, bool ignore_garbage)
   idx_t sum;
   struct base_decode_context ctx;
 
-  char padbuf[8] = "========";
+  char padbuf[8] __attribute__ ((nonstring)) = "========";
   inbuf = xmalloc (BASE_LENGTH (DEC_BLOCKSIZE));
   outbuf = xmalloc (DEC_BLOCKSIZE);
 
