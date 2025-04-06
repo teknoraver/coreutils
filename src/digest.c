@@ -1147,7 +1147,7 @@ digest_check (char const *checkfile_name)
   uintmax_t n_open_or_read_failures = 0;
   bool properly_formatted_lines = false;
   bool matched_checksums = false;
-  unsigned char bin_buffer_unaligned[DIGEST_BIN_BYTES + DIGEST_ALIGN];
+  unsigned char bin_buffer_unaligned[DIGEST_BIN_BYTES + DIGEST_ALIGN] = { 0 };
   /* Make sure bin_buffer is properly aligned. */
   unsigned char *bin_buffer = ptr_align (bin_buffer_unaligned, DIGEST_ALIGN);
   uintmax_t line_number;
@@ -1347,7 +1347,7 @@ digest_check (char const *checkfile_name)
 int
 main (int argc, char **argv)
 {
-  unsigned char bin_buffer_unaligned[DIGEST_BIN_BYTES + DIGEST_ALIGN];
+  unsigned char bin_buffer_unaligned[DIGEST_BIN_BYTES + DIGEST_ALIGN] = { 0 };
   /* Make sure bin_buffer is properly aligned. */
   unsigned char *bin_buffer = ptr_align (bin_buffer_unaligned, DIGEST_ALIGN);
   bool do_check = false;
