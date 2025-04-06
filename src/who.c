@@ -199,9 +199,13 @@ idle_string (time_t when, time_t boottime)
       else
         {
           static char idle_hhmm[IDLESTR_LEN];
-          sprintf (idle_hhmm, "%02d:%02d",
-                   seconds_idle / (60 * 60),
-                   (seconds_idle % (60 * 60)) / 60);
+          unsigned int hh = seconds_idle / (60 * 60);
+          unsigned int mm = (seconds_idle % (60 * 60)) / 60;
+
+          hh %= 24;
+          mm %= 60;
+
+          sprintf (idle_hhmm, "%02u:%02u", hh, mm);
           return idle_hhmm;
         }
     }
