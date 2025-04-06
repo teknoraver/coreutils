@@ -43,6 +43,26 @@
 #include "xstrtol.h"
 #include "xstrtol-error.h"
 
+#ifdef __linux__
+
+#include <sys/syscall.h>
+
+#ifdef __NR_cachestat
+
+#include <linux/mman.h>
+
+static long page_size;
+
+static int
+cachestat(int fd, struct cachestat_range *cstat_range,
+          struct cachestat *cstat, unsigned int flags)
+{
+  return syscall(__NR_cachestat, fd, cstat_range, cstat, flags);
+}
+
+#endif
+#endif
+
 extern bool fts_debug;
 
 /* The official name of this program (e.g., no 'g' prefix).  */
@@ -165,6 +185,9 @@ static bool opt_inodes = false;
 /* If true, print most recently modified date, using the specified format.  */
 static bool opt_time = false;
 
+/* If true, print memory usage.  */
+static bool opt_memory = false;
+
 /* Type of time to display. controlled by --time.  */
 
 enum time_type
@@ -229,6 +252,9 @@ static struct option const long_options[] =
   {"inodes", no_argument, nullptr, INODES_OPTION},
   {"si", no_argument, nullptr, HUMAN_SI_OPTION},
   {"max-depth", required_argument, nullptr, 'd'},
+#ifdef __NR_cachestat
+  {"memory", no_argument, nullptr, 'M'},
+#endif
   {"null", no_argument, nullptr, '0'},
   {"no-dereference", no_argument, nullptr, 'P'},
   {"one-file-system", no_argument, nullptr, 'x'},
@@ -321,6 +347,13 @@ Summarize device usage of the set of FILEs, recursively for directories.\n\
 \n\
       --inodes          list inode usage information instead of block usage\n\
 "), stdout);
+
+#ifdef __NR_cachestat
+      fputs (_("\
+  -M, --memory          print cache usage instead of block usage\n\
+"), stdout);
+#endif
+
       fputs (_("\
   -k                    like --block-size=1K\n\
   -L, --dereference     dereference all symbolic links\n\
@@ -465,6 +498,35 @@ mount_point_in_fts_cycle (FTSENT const *ent)
   return false;
 }
 
+static long get_cacheinfo (MAYBE_UNUSED const char *file)
+{
+#ifdef __NR_cachestat
+  struct cachestat_range cstat_range = { 0 };
+  struct cachestat cstat;
+  int fd = open (file, O_RDONLY | O_CLOEXEC);
+  int ret;
+
+  if (fd == -1)
+    {
+      error (0, errno, _("cannot open %s"), quoteaf (file));
+      return 0;
+    }
+
+  ret = cachestat(fd, &cstat_range, &cstat, 0);
+  close (fd);
+
+  if (ret == -1)
+    {
+      error (0, errno, _("cannot get memory usage"));
+      return 0;
+    }
+
+  return cstat.nr_cache * page_size;
+#else
+  return 0;
+#endif
+}
+
 /* This function is called once for every file system object that fts
    encounters.  fts does a depth-first traversal.  This function knows
    that and accumulates per-directory totals based on changes in
@@ -571,6 +633,7 @@ process_file (FTS *fts, FTSENT *ent)
     }
 
   duinfo_set (&dui,
+              opt_memory ? get_cacheinfo (file) :
               (apparent_size
                ? (usable_st_size (sb) ? MAX (0, sb->st_size) : 0)
                : (uintmax_t) STP_NBLOCKS (sb) * ST_NBLOCKSIZE),
@@ -738,7 +801,11 @@ main (int argc, char **argv)
   while (true)
     {
       int oi = -1;
-      int c = getopt_long (argc, argv, "0abd:chHklmst:xB:DLPSX:",
+      int c = getopt_long (argc, argv, "0abd:chHklmst:xB:DLPSX:"
+#ifdef __NR_cachestat
+                           "M"
+#endif
+                           ,
                            long_options, &oi);
       if (c == -1)
         break;
@@ -855,6 +922,13 @@ main (int argc, char **argv)
         case 'L': /* --dereference */
           symlink_deref_bits = FTS_LOGICAL;
           break;
+
+#ifdef __NR_cachestat
+        case 'M':
+          opt_memory = true;
+          page_size = sysconf(_SC_PAGE_SIZE);
+          break;
+#endif
 
         case 'P': /* --no-dereference */
           symlink_deref_bits = FTS_PHYSICAL;
