@@ -530,6 +530,40 @@ copy_cat (void)
       }
 }
 
+/* Copy data from input to output using splice if possible.
+   This is useful when at least one of the file descriptors is a pipe.
+   Return 1 if successful, 0 if ordinary read+write should be tried,
+   -1 if a serious problem has been diagnosed.  */
+
+static int
+splice_cat (void)
+{
+  /* Copy at most COPY_MAX bytes at a time; this is min
+     (SSIZE_MAX, SIZE_MAX) truncated to a value that is
+     surely aligned well.  */
+  ssize_t copy_max = MIN (SSIZE_MAX, SIZE_MAX) >> 30 << 30;
+
+  /* splice requires at least one of the file descriptors to be a pipe,
+     and may not be supported on all systems or in all configurations.  */
+
+  for (bool some_copied = false; ; some_copied = true)
+    {
+      ssize_t n_read = splice (input_desc, nullptr, STDOUT_FILENO, nullptr,
+                               copy_max, 0);
+      if (n_read < 0)
+        {
+          if (errno == ENOSYS || is_ENOTSUP (errno) || errno == EINVAL
+              || errno == EBADF)
+            return 0;
+          error (0, errno, "%s", quotef (infile));
+          return -1;
+        }
+
+      if (n_read == 0)
+        return some_copied ? 1 : 0;
+    }
+}
+
 
 int
 main (int argc, char **argv)
@@ -650,6 +684,9 @@ main (int argc, char **argv)
   /* True if the output is a regular file.  */
   bool out_isreg = S_ISREG (ostat_buf.st_mode) != 0;
 
+  /* True if the output is a pipe.  */
+  bool out_isfifo = S_ISFIFO (ostat_buf.st_mode) != 0;
+
   if (! (number || show_ends || squeeze_blank))
     {
       file_open_mode |= O_BINARY;
@@ -731,7 +768,7 @@ main (int argc, char **argv)
 
       /* Select which version of 'cat' to use.  If any format-oriented
          options were given use 'cat'; if not, use 'copy_cat' if it
-         works, 'simple_cat' otherwise.  */
+         works, 'splice_cat' if one fd is a pipe, 'simple_cat' otherwise.  */
 
       if (! (number || show_ends || show_nonprinting
              || show_tabs || squeeze_blank))
@@ -745,9 +782,21 @@ main (int argc, char **argv)
             }
           else
             {
-              insize = MAX (insize, outsize);
-              inbuf = xalignalloc (page_size, insize);
-              ok &= simple_cat (inbuf, insize);
+              /* Try splice if one of the files is a pipe.  */
+              bool in_isfifo = S_ISFIFO (ostat_buf.st_mode);
+              int splice_cat_status =
+                (in_isfifo || out_isfifo) ? splice_cat () : 0;
+              if (splice_cat_status != 0)
+                {
+                  inbuf = nullptr;
+                  ok &= 0 < splice_cat_status;
+                }
+              else
+                {
+                  insize = MAX (insize, outsize);
+                  inbuf = xalignalloc (page_size, insize);
+                  ok &= simple_cat (inbuf, insize);
+                }
             }
         }
       else
